@@ -8,3 +8,4 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+- The research agent runs in one streaming endpoint (/api/research, NDJSON events) with hard loop limits; no database, to keep the MVP simple.

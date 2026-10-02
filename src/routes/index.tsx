@@ -16,7 +16,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Source = { id: string; sourceType: string; title: string; url: string; authors?: string; publishedDate?: string; snippet: string };
-type Ev = { type: string; [k: string]: any };
+type Ev = any;
 
 const EXAMPLES = [
   "Find recent approaches for detecting hallucinations in LLMs.",
