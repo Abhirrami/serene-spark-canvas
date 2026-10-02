@@ -115,7 +115,7 @@ async function searchAcademic(query: string): Promise<Omit<Source, "id">[]> {
   const headers: Record<string, string> = {};
   if (process.env.SEMANTIC_SCHOLAR_API_KEY) headers["x-api-key"] = process.env.SEMANTIC_SCHOLAR_API_KEY;
   const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(res.status === 429 ? "Academic search is busy (rate limited)" : `Academic search failed (${res.status})`);
+  if (!res.ok) return searchOpenAlex(query);
   const data = (await res.json()) as {
     data?: { title: string; url: string; abstract?: string; authors?: { name: string }[]; year?: number }[];
   };
@@ -129,6 +129,28 @@ async function searchAcademic(query: string): Promise<Omit<Source, "id">[]> {
       publishedDate: p.year ? String(p.year) : undefined,
       snippet: (p.abstract ?? "No abstract available.").slice(0, 600),
     }));
+}
+
+async function searchOpenAlex(query: string): Promise<Omit<Source, "id">[]> {
+  const res = await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${LIMITS.MAX_RESULTS_PER_SEARCH}&select=title,doi,id,publication_year,authorships,abstract_inverted_index`);
+  if (!res.ok) throw new Error(`Academic search failed (${res.status})`);
+  const data = (await res.json()) as { results?: any[] };
+  return (data.results ?? []).filter((w) => w.title).map((w) => {
+    let abs = "No abstract available.";
+    if (w.abstract_inverted_index) {
+      const words: string[] = [];
+      for (const [word, pos] of Object.entries(w.abstract_inverted_index as Record<string, number[]>)) for (const i of pos) words[i] = word;
+      abs = words.join(" ");
+    }
+    return {
+      sourceType: "academic" as const,
+      title: w.title,
+      url: w.doi || w.id,
+      authors: (w.authorships ?? []).slice(0, 4).map((a: any) => a.author?.display_name).filter(Boolean).join(", "),
+      publishedDate: w.publication_year ? String(w.publication_year) : undefined,
+      snippet: abs.slice(0, 600),
+    };
+  });
 }
 
 export async function runAgent(question: string, emit: (e: AgentEvent) => void) {
