@@ -33,6 +33,7 @@ type Plan = { objective: string; subtopics: string[]; toolCalls: ToolCall[] };
 type Review = { status: "continue" | "finalize"; reason: string; missingTopics: string[]; nextQueries: ToolCall[] };
 
 const LAG = "X-Lovable-AIG-Run-ID";
+const UA = "ResearchPilot/1.0 (mailto:research@researchpilot.app)";
 
 function makeLlm() {
   const key = process.env['LOVABLE_API_KEY'];
@@ -92,12 +93,12 @@ function cleanCalls(calls: unknown): ToolCall[] {
 }
 
 async function searchWeb(query: string): Promise<Omit<Source, "id">[]> {
-  const key = process.env['TAVILY_API_KEY'];
+  const key = process.env['TAVILY_API_KEY']?.trim();
   if (!key) throw new Error("Web search not configured (TAVILY_API_KEY missing)");
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ query, max_results: LIMITS.MAX_RESULTS_PER_SEARCH }),
+    body: JSON.stringify({ api_key: key, query, max_results: LIMITS.MAX_RESULTS_PER_SEARCH }),
   });
   if (!res.ok) throw new Error(`Web search failed (${res.status})`);
   const data = (await res.json()) as { results?: { title: string; url: string; content: string; published_date?: string }[] };
@@ -112,7 +113,7 @@ async function searchWeb(query: string): Promise<Omit<Source, "id">[]> {
 
 async function searchAcademic(query: string): Promise<Omit<Source, "id">[]> {
   const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${LIMITS.MAX_RESULTS_PER_SEARCH}&fields=title,url,abstract,authors,year`;
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { "User-Agent": UA };
   if (process.env['SEMANTIC_SCHOLAR_API_KEY']) headers["x-api-key"] = process.env['SEMANTIC_SCHOLAR_API_KEY'];
   const res = await fetch(url, { headers });
   if (!res.ok) return searchOpenAlex(query);
@@ -132,7 +133,7 @@ async function searchAcademic(query: string): Promise<Omit<Source, "id">[]> {
 }
 
 async function searchOpenAlex(query: string): Promise<Omit<Source, "id">[]> {
-  const res = await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${LIMITS.MAX_RESULTS_PER_SEARCH}&select=title,doi,id,publication_year,authorships,abstract_inverted_index`);
+  const res = await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${LIMITS.MAX_RESULTS_PER_SEARCH}&select=title,doi,id,publication_year,authorships,abstract_inverted_index&mailto=research@researchpilot.app`, { headers: { "User-Agent": UA } });
   if (!res.ok) throw new Error(`Academic search failed (${res.status})`);
   const data = (await res.json()) as { results?: any[] };
   return (data.results ?? []).filter((w) => w.title).map((w) => {
