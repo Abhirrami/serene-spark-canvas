@@ -4,7 +4,7 @@ import { streamText } from "ai";
 export const LIMITS = {
   MAX_RESEARCH_ITERATIONS: 2,
   MAX_TOOL_CALLS: 5,
-  MAX_RESULTS_PER_SEARCH: 5,
+  MAX_RESULTS_PER_SEARCH: 3,
   MAX_TOTAL_SOURCES: 10,
 };
 
@@ -13,8 +13,8 @@ export type Source = {
   sourceType: "web" | "academic";
   title: string;
   url: string;
-  authors?: string;
-  publishedDate?: string;
+  authors?: string | undefined;
+  publishedDate?: string | undefined;
   snippet: string;
 };
 
@@ -35,7 +35,7 @@ type Review = { status: "continue" | "finalize"; reason: string; missingTopics: 
 const LAG = "X-Lovable-AIG-Run-ID";
 
 function makeLlm() {
-  const key = process.env.LOVABLE_API_KEY;
+  const key = process.env['LOVABLE_API_KEY'];
   if (!key) throw new Error("AI is not configured (missing LOVABLE_API_KEY).");
   let runId: string | undefined;
   const openai = createOpenAI({
@@ -92,7 +92,7 @@ function cleanCalls(calls: unknown): ToolCall[] {
 }
 
 async function searchWeb(query: string): Promise<Omit<Source, "id">[]> {
-  const key = process.env.TAVILY_API_KEY;
+  const key = process.env['TAVILY_API_KEY'];
   if (!key) throw new Error("Web search not configured (TAVILY_API_KEY missing)");
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -113,7 +113,7 @@ async function searchWeb(query: string): Promise<Omit<Source, "id">[]> {
 async function searchAcademic(query: string): Promise<Omit<Source, "id">[]> {
   const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${LIMITS.MAX_RESULTS_PER_SEARCH}&fields=title,url,abstract,authors,year`;
   const headers: Record<string, string> = {};
-  if (process.env.SEMANTIC_SCHOLAR_API_KEY) headers["x-api-key"] = process.env.SEMANTIC_SCHOLAR_API_KEY;
+  if (process.env['SEMANTIC_SCHOLAR_API_KEY']) headers["x-api-key"] = process.env['SEMANTIC_SCHOLAR_API_KEY'];
   const res = await fetch(url, { headers });
   if (!res.ok) return searchOpenAlex(query);
   const data = (await res.json()) as {
@@ -164,7 +164,7 @@ export async function runAgent(question: string, emit: (e: AgentEvent) => void) 
     await llm(
       `You are the Planner stage of ResearchPilot, a research agent. Break the question into 2-4 subtopics and choose tool calls.
 Tools: "search_web" (general web, news, blogs, benchmarks, industry) and "search_academic" (peer-reviewed papers).
-Pick the tool that best fits each query. Propose at most 3 tool calls. Queries must be short keyword searches.
+Pick the tool that best fits each query; use BOTH tools in the plan (at least one of each). Propose at most 3 tool calls. Queries must be short keyword searches.
 Respond ONLY with JSON: {"objective": string, "subtopics": string[], "toolCalls": [{"tool": "search_web"|"search_academic", "query": string}]}`,
       `Research question: ${question}`,
     ),
